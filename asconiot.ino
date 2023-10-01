@@ -13,7 +13,10 @@
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <RNG.h>
+#include <Arduino_JSON.h>
 
+
+// khai bao do dai
 #define MAX_MESSAGE_LEN 100  // Maximum message length
 #define CRYPTO_KEYBYTES 16
 #define CRYPTO_NPUBBYTES 16
@@ -21,16 +24,12 @@
 #define KEY_LENGTH_32 32
 
 // Khai báo biến cho khóa Diffie-Hellman và khóa chia sẻ bí mật
-uint8_t privateKey[KEY_LENGTH_32];  // Khóa bí mật của bạn
-uint8_t publicKey[KEY_LENGTH_32];   // Khóa công khai của bạn
-uint8_t sharedSecret[KEY_LENGTH_32]; // Khóa chia sẻ bí mật sau khi tính 
+uint8_t privateKey[KEY_LENGTH_32];    // Khóa bí mật của bạn
+uint8_t publicKey[KEY_LENGTH_32];     // Khóa công khai của bạn
+uint8_t sharedSecret[KEY_LENGTH_32];  // Khóa chia sẻ bí mật sau khi tính
 uint8_t partnerPublicKey[KEY_LENGTH_32];
 
-
-const unsigned char key[CRYPTO_KEYBYTES] = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+// tam thoi chua dung nonce
 const unsigned char nonce[CRYPTO_NPUBBYTES] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
@@ -38,7 +37,7 @@ const unsigned char nonce[CRYPTO_NPUBBYTES] = {
 
 
 
-
+// decrypt
 int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
                         unsigned char* nsec, const unsigned char* c,
                         unsigned long long clen, const unsigned char* ad,
@@ -107,39 +106,41 @@ int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
 const char* ssid = "DuyManhKMA";
 const char* password = "your_PASSWORD";
 
-void hexStringToByteArray(const char* hexString, uint8_t* byteArray, size_t byteLength) {
-int hexStringLength = strlen(hexString);
 
-// Đảm bảo rằng độ dài của chuỗi hex là số chẵn
-if (hexStringLength % 2 != 0) {
+// hexStringToByteArray
+void hexStringToByteArray(const char* hexString, uint8_t* byteArray, size_t byteLength) {
+  int hexStringLength = strlen(hexString);
+
+  // Đảm bảo rằng độ dài của chuỗi hex là số chẵn
+  if (hexStringLength % 2 != 0) {
     // Nếu độ dài không chẵn, bạn có thể xử lý lỗi hoặc điều chỉnh độ dài
     // ví dụ: thêm '0' ở đầu chuỗi để làm cho độ dài chẵn
-}
+  }
 
-// Tính toán độ dài của mảng uint8_t
-int byteArraySize = hexStringLength / 2;
+  // Tính toán độ dài của mảng uint8_t
+  int byteArraySize = hexStringLength / 2;
 
-// Khai báo mảng uint8_t để lưu trữ dữ liệu đã chuyển đổi
+  // Khai báo mảng uint8_t để lưu trữ dữ liệu đã chuyển đổi
 
-// Lặp qua chuỗi hex và chuyển đổi thành mảng uint8_t
-for (int i = 0; i < hexStringLength; i += 2) {
-    char hexPair[3] = {hexString[i], hexString[i + 1], '\0'};
+  // Lặp qua chuỗi hex và chuyển đổi thành mảng uint8_t
+  for (int i = 0; i < hexStringLength; i += 2) {
+    char hexPair[3] = { hexString[i], hexString[i + 1], '\0' };
     byteArray[i / 2] = strtol(hexPair, nullptr, 16);
-}
+  }
 }
 
-
-void initDiffihelman(){
- String hexPublicKey = "";
- String partnerPublicKeyStr = "";
+// Khoi tao trao doi khoa
+void initDiffihelman() {
+  String hexPublicKey = "";
+  String partnerPublicKeyStr = "";
 
 
   // Tạo cặp khóa Diffie-Hellman
   Curve25519::dh1(publicKey, privateKey);
   String hexstring = "";
-// doipublic tu arr sang string gui len server
-    for(int i = 0; i < KEY_LENGTH_32; i++) {
-    if(publicKey[i] < 0x10) {
+  // doi public tu arr sang string gui len server
+  for (int i = 0; i < KEY_LENGTH_32; i++) {
+    if (publicKey[i] < 0x10) {
       hexstring += '0';
     }
 
@@ -149,10 +150,10 @@ void initDiffihelman(){
   Serial.println(hexstring);
   Serial.println("**********************");
 
-   HTTPClient http;
+  HTTPClient http;
   // Địa chỉ của server và endpoint
 
-// Print the hexadecimal string
+  // Print the hexadecimal string
   String serverAddress = "http://192.168.1.104:9494";
   String endpoint = "/api/asconv12/diffie-hellman";
   String jsonBody = "{\"publicKey\":\"" + hexstring + "\"}";
@@ -163,29 +164,30 @@ void initDiffihelman(){
   int httpResponseCode = http.POST(jsonBody);
 
   if (httpResponseCode > 0) {
-   partnerPublicKeyStr = http.getString();
+    partnerPublicKeyStr = http.getString();
     Serial.println(httpResponseCode);
     Serial.println(partnerPublicKeyStr);
   } else {
     Serial.print("Error on sending POST request: ");
     Serial.println(httpResponseCode);
   }
-    const char* hexString = partnerPublicKeyStr.c_str();
-    Serial.println("Server publickey");
-    Serial.println(hexString);
-hexStringToByteArray(hexString,partnerPublicKey,sizeof(partnerPublicKey));
+  // doi gia tri hex string public key tu server sang byte de tinh toan shared key
+  const char* hexString = partnerPublicKeyStr.c_str();
+  Serial.println("Server publickey");
+  Serial.println(hexString);
+  hexStringToByteArray(hexString, partnerPublicKey, sizeof(partnerPublicKey));
   Serial.println("Diffie-Hellman ShpartnerPublicKeyared Secret:");
   for (int i = 0; i < KEY_LENGTH_32; i++) {
     Serial.print(partnerPublicKey[i], HEX);
     Serial.print(" ");
   }
 
-// se chuyen doi tu parnerkey -> shared
-
-if (!Curve25519::dh2(partnerPublicKey, privateKey)){
-  Serial.println("Error!!!!");
-  return ;
-}
+  // se chuyen doi tu parnerkey -> shared
+  if (!Curve25519::dh2(partnerPublicKey, privateKey)) {
+    Serial.println("Error!!!!");
+    http.end();
+    return;
+  }
 
 
 
@@ -196,7 +198,6 @@ if (!Curve25519::dh2(partnerPublicKey, privateKey)){
     Serial.print(" ");
   }
   Serial.println();
-
 }
 
 
@@ -214,21 +215,24 @@ void setup() {
   Serial.println("Connected to WiFi");
 }
 
-void sendPostRequest(String hexCiphertext) {
+// sendPost resquet cipher text len server
+String sendPostRequest(String hexCiphertext, unsigned long long ciphertext_len, unsigned long long mess_len) {
 
   HTTPClient http;
   // Địa chỉ của server và endpoint
   String serverAddress = "http://192.168.1.104:9494";
   String endpoint = "/api/asconv12";
-  String jsonBody = "{\"ciphertext\":\"" + hexCiphertext + "\"}";
+
+  String jsonBody = "{\n  \"ciphertext\":\"" + hexCiphertext + "\",\n  \"cipherTextLength\":" + ciphertext_len + ",\n  \"messageLength\":" + mess_len + "\n}";
+
   http.begin(serverAddress + endpoint);
   http.addHeader("Content-Type", "application/json");
 
   // Gửi POST request
   int httpResponseCode = http.POST(jsonBody);
-
+  String response = "";
   if (httpResponseCode > 0) {
-    String response = http.getString();
+    response = http.getString();
     Serial.println(httpResponseCode);
     Serial.println(response);
   } else {
@@ -237,6 +241,7 @@ void sendPostRequest(String hexCiphertext) {
   }
 
   http.end();
+  return response;
 }
 
 
@@ -245,13 +250,24 @@ void sendPostRequest(String hexCiphertext) {
 void loop() {
 
 
-initDiffihelman();
-  const char message[] = "Hello, ASCON!";
+  initDiffihelman();
+// Khoi tao json
+  JSONVar jsonObj;
+
+  // Thêm các trường dữ liệu vào JSON
+  jsonObj["temperature"] = 24;
+  jsonObj["humidity"] = 69;
+  // Chuyển đổi JSON thành chuỗi
+  String jsonString = JSON.stringify(jsonObj);
+  char message[jsonString.length() + 1];  // +1 cho ký tự kết thúc chuỗi null
+
+  jsonString.toCharArray(message, sizeof(message));
+  jsonString = jsonString + "!";
   const char associated_data[] = "AdditionalData";
   String hexCiphertext = "";
+  // cat key tu 32 -> 16
   uint8_t partnerPublicKey16[16];
-
-  for (int i =0;i<16;i++){
+  for (int i = 0; i < 16; i++) {
     partnerPublicKey16[i] = partnerPublicKey[i];
   }
 
@@ -265,12 +281,9 @@ initDiffihelman();
     NULL, nonce, partnerPublicKey16);
 
   if (encrypt_result != 0) {
-    // Serial.println("Encryption failed");
+    Serial.println("Encryption failed");
   } else {
-    // Serial.println("Encryption successful" );
-
-
-
+    Serial.println("Encryption successful" );
     for (size_t i = 0; i < ciphertext_len; i++) {
       if (ciphertext[i] < CRYPTO_KEYBYTES) {
         hexCiphertext += "0";  // Đảm bảo có đủ 2 ký tự hex
@@ -286,25 +299,35 @@ initDiffihelman();
     unsigned long long decrypted_message_len;
     unsigned char nsec[CRYPTO_NSECBYTES];  // Non-secret data (not used in this example)
 
+
+
+// lay cipher text chua du lieu tu serrver roi chuyen sang byte arr de giai ma
+    String ciphertextRes = sendPostRequest(hexCiphertext, ciphertext_len, strlen(message));
+    uint8_t cipherServer[ciphertextRes.length()];  
+    const char* hexString = ciphertextRes.c_str();
+    hexStringToByteArray(hexString, cipherServer, ciphertextRes.length());
+
+
     int decrypt_result = crypto_aead_decrypt(
       decrypted_message, &decrypted_message_len,
-      NULL, ciphertext, ciphertext_len,
+      NULL, cipherServer, sizeof(cipherServer) / 2,
       NULL, 0,
       nonce, partnerPublicKey16);
 
     if (decrypt_result != 0) {
-      // Serial.println("Decryption failed");
+      Serial.println("Decryption failed");
     } else {
       Serial.print("Decryption successful. Decrypted Message: ");
       Serial.println((char*)decrypted_message);
     }
   }
 
-
-  sendPostRequest(hexCiphertext);
- memset(privateKey, 0, sizeof(privateKey));
+// 
+  memset(privateKey, 0, sizeof(privateKey));
   memset(publicKey, 0, sizeof(publicKey));
+  memset(sharedSecret,0,sizeof(sharedSecret));
+  memset(partnerPublicKey16,0,sizeof(partnerPublicKey16));
   // Để đảm bảo chỉ gửi request một lần, không cần loop nữa
-  delay(20000);  // Đợi 5 giây và sau đó kết thúc chương trình
+  delay(5000);  // Đợi 5 giây và sau đó kết thúc chương trình
   ESP.restart();
 }
