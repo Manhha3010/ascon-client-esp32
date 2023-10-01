@@ -10,6 +10,33 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <Crypto.h>
+#include <Curve25519.h>
+#include <RNG.h>
+
+#define MAX_MESSAGE_LEN 100  // Maximum message length
+#define CRYPTO_KEYBYTES 16
+#define CRYPTO_NPUBBYTES 16
+#define CRYPTO_ABYTES 16
+#define KEY_LENGTH_32 32
+
+// Khai báo biến cho khóa Diffie-Hellman và khóa chia sẻ bí mật
+uint8_t privateKey[KEY_LENGTH_32];  // Khóa bí mật của bạn
+uint8_t publicKey[KEY_LENGTH_32];   // Khóa công khai của bạn
+uint8_t sharedSecret[KEY_LENGTH_32]; // Khóa chia sẻ bí mật sau khi tính 
+uint8_t partnerPublicKey[KEY_LENGTH_32];
+
+
+const unsigned char key[CRYPTO_KEYBYTES] = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+const unsigned char nonce[CRYPTO_NPUBBYTES] = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+
 
 
 int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
@@ -80,15 +107,104 @@ int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
 const char* ssid = "DuyManhKMA";
 const char* password = "your_PASSWORD";
 
+void hexStringToByteArray(const char* hexString, uint8_t* byteArray, size_t byteLength) {
+int hexStringLength = strlen(hexString);
+
+// Đảm bảo rằng độ dài của chuỗi hex là số chẵn
+if (hexStringLength % 2 != 0) {
+    // Nếu độ dài không chẵn, bạn có thể xử lý lỗi hoặc điều chỉnh độ dài
+    // ví dụ: thêm '0' ở đầu chuỗi để làm cho độ dài chẵn
+}
+
+// Tính toán độ dài của mảng uint8_t
+int byteArraySize = hexStringLength / 2;
+
+// Khai báo mảng uint8_t để lưu trữ dữ liệu đã chuyển đổi
+
+// Lặp qua chuỗi hex và chuyển đổi thành mảng uint8_t
+for (int i = 0; i < hexStringLength; i += 2) {
+    char hexPair[3] = {hexString[i], hexString[i + 1], '\0'};
+    byteArray[i / 2] = strtol(hexPair, nullptr, 16);
+}
+}
+
+
+void initDiffihelman(){
+ String hexPublicKey = "";
+ String partnerPublicKeyStr = "";
+
+
+  // Tạo cặp khóa Diffie-Hellman
+  Curve25519::dh1(publicKey, privateKey);
+  String hexstring = "";
+// doipublic tu arr sang string gui len server
+    for(int i = 0; i < KEY_LENGTH_32; i++) {
+    if(publicKey[i] < 0x10) {
+      hexstring += '0';
+    }
+
+    hexstring += String(publicKey[i], HEX);
+  }
+  Serial.println("public key string:");
+  Serial.println(hexstring);
+  Serial.println("**********************");
+
+   HTTPClient http;
+  // Địa chỉ của server và endpoint
+
+// Print the hexadecimal string
+  String serverAddress = "http://192.168.1.104:9494";
+  String endpoint = "/api/asconv12/diffie-hellman";
+  String jsonBody = "{\"publicKey\":\"" + hexstring + "\"}";
+  http.begin(serverAddress + endpoint);
+  http.addHeader("Content-Type", "application/json");
+
+  // Gửi POST request
+  int httpResponseCode = http.POST(jsonBody);
+
+  if (httpResponseCode > 0) {
+   partnerPublicKeyStr = http.getString();
+    Serial.println(httpResponseCode);
+    Serial.println(partnerPublicKeyStr);
+  } else {
+    Serial.print("Error on sending POST request: ");
+    Serial.println(httpResponseCode);
+  }
+    const char* hexString = partnerPublicKeyStr.c_str();
+    Serial.println("Server publickey");
+    Serial.println(hexString);
+hexStringToByteArray(hexString,partnerPublicKey,sizeof(partnerPublicKey));
+  Serial.println("Diffie-Hellman ShpartnerPublicKeyared Secret:");
+  for (int i = 0; i < KEY_LENGTH_32; i++) {
+    Serial.print(partnerPublicKey[i], HEX);
+    Serial.print(" ");
+  }
+
+// se chuyen doi tu parnerkey -> shared
+
+if (!Curve25519::dh2(partnerPublicKey, privateKey)){
+  Serial.println("Error!!!!");
+  return ;
+}
 
 
 
+  http.end();
+  Serial.println("Diffie-Hellman Shared Secret:");
+  for (int i = 0; i < KEY_LENGTH_32; i++) {
+    Serial.print(partnerPublicKey[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+
+}
 
 
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
+
 
   WiFi.begin(ssid);
   while (WiFi.status() != WL_CONNECTED) {
@@ -102,7 +218,7 @@ void sendPostRequest(String hexCiphertext) {
 
   HTTPClient http;
   // Địa chỉ của server và endpoint
-  String serverAddress = "http://192.168.1.106:9494";
+  String serverAddress = "http://192.168.1.104:9494";
   String endpoint = "/api/asconv12";
   String jsonBody = "{\"ciphertext\":\"" + hexCiphertext + "\"}";
   http.begin(serverAddress + endpoint);
@@ -122,26 +238,22 @@ void sendPostRequest(String hexCiphertext) {
 
   http.end();
 }
-#define MAX_MESSAGE_LEN 100  // Maximum message length
-#define CRYPTO_KEYBYTES 16
-#define CRYPTO_NPUBBYTES 16
-#define CRYPTO_ABYTES 16
 
-const unsigned char key[CRYPTO_KEYBYTES] = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
 
-const unsigned char nonce[CRYPTO_NPUBBYTES] = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+
 
 void loop() {
 
+
+initDiffihelman();
   const char message[] = "Hello, ASCON!";
   const char associated_data[] = "AdditionalData";
   String hexCiphertext = "";
+  uint8_t partnerPublicKey16[16];
+
+  for (int i =0;i<16;i++){
+    partnerPublicKey16[i] = partnerPublicKey[i];
+  }
 
   unsigned char ciphertext[MAX_MESSAGE_LEN + CRYPTO_ABYTES];
   unsigned long long ciphertext_len;
@@ -150,16 +262,17 @@ void loop() {
     ciphertext, &ciphertext_len,
     (const unsigned char*)message, strlen(message),
     NULL, 0,
-    NULL, nonce, key);
+    NULL, nonce, partnerPublicKey16);
 
   if (encrypt_result != 0) {
-    Serial.println("Encryption failed");
+    // Serial.println("Encryption failed");
   } else {
-    Serial.println("Encryption successful");
+    // Serial.println("Encryption successful" );
+
 
 
     for (size_t i = 0; i < ciphertext_len; i++) {
-      if (ciphertext[i] < 16) {
+      if (ciphertext[i] < CRYPTO_KEYBYTES) {
         hexCiphertext += "0";  // Đảm bảo có đủ 2 ký tự hex
       }
       hexCiphertext += String(ciphertext[i], HEX);
@@ -177,10 +290,10 @@ void loop() {
       decrypted_message, &decrypted_message_len,
       NULL, ciphertext, ciphertext_len,
       NULL, 0,
-      nonce, key);
+      nonce, partnerPublicKey16);
 
     if (decrypt_result != 0) {
-      Serial.println("Decryption failed");
+      // Serial.println("Decryption failed");
     } else {
       Serial.print("Decryption successful. Decrypted Message: ");
       Serial.println((char*)decrypted_message);
@@ -189,8 +302,9 @@ void loop() {
 
 
   sendPostRequest(hexCiphertext);
-
+ memset(privateKey, 0, sizeof(privateKey));
+  memset(publicKey, 0, sizeof(publicKey));
   // Để đảm bảo chỉ gửi request một lần, không cần loop nữa
-  delay(5000);  // Đợi 5 giây và sau đó kết thúc chương trình
+  delay(20000);  // Đợi 5 giây và sau đó kết thúc chương trình
   ESP.restart();
 }
