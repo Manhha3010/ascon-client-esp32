@@ -298,6 +298,7 @@ String sendPostRequest(String hexCiphertext, unsigned long long ciphertext_len, 
 
 void loop()
 {
+  int isFire = 0;
 
   float h = dht.readHumidity();
   // Read temperature as Celsius (the default)
@@ -423,12 +424,23 @@ void loop()
       {
         if ((bool)myObject["light"] == 1)
         {
-          digitalWrite(LED_2, LOW);
+
           digitalWrite(LED_1, LOW);
         }
         else
         {
-          digitalWrite(LED_2, HIGH);
+
+          digitalWrite(LED_1, HIGH);
+        }
+      }
+        if (myObject.hasOwnProperty("sprinkler"))
+      {
+        if ((bool)myObject["sprinkler"] == 1)
+        {
+          digitalWrite(LED_1, LOW);
+        }
+        else
+        {
           digitalWrite(LED_1, HIGH);
         }
       }
@@ -454,6 +466,11 @@ void loop()
           digitalWrite(RELAY_PIN, LOW);
         }
       }
+       if (myObject.hasOwnProperty("isFire"))
+      {
+          isFire = (bool)myObject["isFire"] ;
+         Serial.println("Chay roi!!!!");
+      }
     }
   }
 
@@ -463,6 +480,6 @@ void loop()
   memset(sharedSecret, 0, sizeof(sharedSecret));
   memset(partnerPublicKey16, 0, sizeof(partnerPublicKey16));
   // Để đảm bảo chỉ gửi request một lần, không cần loop nữa
-  delay(20000); // Đợi 20 giây và sau đó kết thúc chương trình
+  delay(isFire == 0 ?10000: 30000); // Đợi 20 giây và sau đó kết thúc chương trình
   ESP.restart();
 }
