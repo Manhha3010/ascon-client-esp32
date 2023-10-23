@@ -15,7 +15,7 @@
 #include <Arduino_JSON.h>
 #include "DHT.h"
 
-#define RELAY_PIN 14
+#define RELAY_PIN 23
 #define PINK_OUT_SENSOR 26 // cam bien hong ngoai
 #define LIGHT_SENSOR 13
 #define DHT_PIN 15
@@ -27,16 +27,15 @@ DHT dht(DHT_PIN, DHTTYPE);
 
 #define HUMIDITY A0 // analog/ do am
 
-#define LIGHT_MIN 200           // ngưỡng ánh sáng coi là tối để bật đèn, tùy chỉnh theo nhu cầu
-#define LIGHT_ON_DURATION 15000 // 15s, thời gian tắt đèn sau khi không còn chuyển động
+// #define LIGHT_MIN 200           // ngưỡng ánh sáng coi là tối để bật đèn, tùy chỉnh theo nhu cầu
+// #define LIGHT_ON_DURATION 15000 // 15s, thời gian tắt đèn sau khi không còn chuyển động
 
 // Khai báo tần suất cập nhật dữ liệu đất là 10 phút 1 lần
-const int UPDATE_INTERVAL = 600000; // 10p * 60s * 1000ms;
-unsigned long lastSentToServer = 0;
+// const int UPDATE_INTERVAL = 600000; // 10p * 60s * 1000ms;
+// unsigned long lastSentToServer = 0;
 // Khai báo thời gian bật relay tưới nước
-const int WATER_INTERVAL = 60000;    // thời gian tưới là 60s
-unsigned long wateringStartTime = 0; // lưu thời gian bắt đầu tưới để còn tắt
-boolean relayStatus = false;         // lưu trạng thái bật tắt cảu relay
+// const int WATER_INTERVAL = 60000; // thời gian tưới là 60s
+// boolean relayStatus = false;         // lưu trạng thái bật tắt cảu relay
 
 int lightStatus = 0;
 // boolean relayStatus = false;
@@ -44,6 +43,9 @@ boolean alarmMode = false;
 boolean socketState = 0;
 
 unsigned long lastMotionDetected = 0; // lưu thời gian lần cuối phát hiện chuyển động
+
+// endpoint
+#define END_POINT "http://192.168.1.100:9494"
 
 // khai bao do dai
 #define MAX_MESSAGE_LEN 100 // Maximum message length
@@ -186,7 +188,7 @@ void initDiffihelman()
   // Địa chỉ của server và endpoint
 
   // Print the hexadecimal string
-  String serverAddress = "http://192.168.1.114:9494";
+  String serverAddress = END_POINT;
   String endpoint = "/api/asconv12/diffie-hellman";
   String jsonBody = "{\"publicKey\":\"" + hexstring + "\"}";
   http.begin(serverAddress + endpoint);
@@ -247,6 +249,10 @@ void setup()
   pinMode(FAN, OUTPUT);
   pinMode(LED_1, OUTPUT);
   pinMode(LED_2, OUTPUT);
+  digitalWrite(FAN, HIGH);
+  digitalWrite(LED_1, HIGH);
+  digitalWrite(LED_2, HIGH);
+  digitalWrite(RELAY_PIN, LOW);
 
   WiFi.begin(ssid);
   while (WiFi.status() != WL_CONNECTED)
@@ -263,7 +269,7 @@ String sendPostRequest(String hexCiphertext, unsigned long long ciphertext_len, 
   Serial.println("Start to post to server");
   HTTPClient http;
   // Địa chỉ của server và endpoint
-  String serverAddress = "http://192.168.1.114:9494";
+  String serverAddress = END_POINT;
   String endpoint = "/api/asconv12";
 
   String jsonBody = "{\n  \"ciphertext\":\"" + hexCiphertext + "\",\n  \"cipherTextLength\":" + ciphertext_len + ",\n  \"messageLength\":" + mess_len + "\n}";
@@ -308,22 +314,6 @@ void loop()
   float hif = dht.computeHeatIndex(f, h);
   // Compute heat index in Celsius (Fahrenheit = false)
   float hic = dht.computeHeatIndex(t, h, false);
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.print(t);
-  Serial.print(" *C ");
-  Serial.print(f);
-  Serial.print(" *F\t");
-  Serial.print("  Heat index: ");
-  Serial.print(hic);
-  Serial.print(" *C ");
-  Serial.print(hif);
-  Serial.println(" *F");
-  digitalWrite(FAN, LOW);
-  digitalWrite(LED_1, LOW);
-  digitalWrite(LED_2, LOW);
 
   // he thong vuon thong minh==================================================
   float moisture = 0;
@@ -335,33 +325,20 @@ void loop()
     delay(500);
     Serial.println(moisture);
   }
-  moisture = moisture / 10;
-
-  // Serial.print("Trang thai cua đất hien tai: "); Serial.print(moisture);
-  if (moisture < 500)
-  {
-    // Đất quá khô, bật máy bơm
-    relayStatus = true;
-    // cập nhật lên phần mềm Blynk
-    // Blynk.virtualWrite(V3, relayStatus);
-  }
 
   int motionDetected = digitalRead(PINK_OUT_SENSOR);
   int lightStatus = digitalRead(LIGHT_SENSOR);
-  Serial.println("Light la");
-  Serial.println(lightStatus);
-  Serial.println(motionDetected);
-  Serial.println("do an ");
-  int doam = digitalRead(DHT_PIN);
-  Serial.println(doam);
 
   initDiffihelman();
   // Khoi tao json
   JSONVar jsonObj;
 
   // Thêm các trường dữ liệu vào JSON
-  jsonObj["temperature"] = 24;
-  jsonObj["humidity"] = (int)moisture;
+  jsonObj["temperature"] = t;
+  jsonObj["humidity"] = h;
+  jsonObj["humidityGround"] = (int)moisture;
+  jsonObj["isDark"] = lightStatus;
+  jsonObj["isMotionDetected"] = motionDetected;
   // Chuyển đổi JSON thành chuỗi
   String jsonString = JSON.stringify(jsonObj);
   char message[jsonString.length() + 1]; // +1 cho ký tự kết thúc chuỗi null
@@ -428,10 +405,55 @@ void loop()
     }
     else
     {
-      digitalWrite(RELAY_PIN, HIGH);
-      digitalWrite(LED_1, HIGH);
+      digitalWrite(RELAY_PIN, LOW);
+
+      digitalWrite(FAN, LOW);
+
       Serial.print("Decryption successful. Decrypted Message: ");
       Serial.println((char *)decrypted_message);
+      JSONVar myObject = JSON.parse((char *)decrypted_message);
+
+      // JSON.typeof(jsonVar) can be used to get the type of the variable
+      if (JSON.typeof(myObject) == "undefined")
+      {
+        Serial.println("Parsing input failed!");
+        ESP.restart();
+      }
+      if (myObject.hasOwnProperty("light"))
+      {
+        if ((bool)myObject["light"] == 1)
+        {
+          digitalWrite(LED_2, LOW);
+          digitalWrite(LED_1, LOW);
+        }
+        else
+        {
+          digitalWrite(LED_2, HIGH);
+          digitalWrite(LED_1, HIGH);
+        }
+      }
+      if (myObject.hasOwnProperty("fan"))
+      {
+        if ((bool)myObject["fan"] == 1)
+        {
+          digitalWrite(FAN, LOW);
+        }
+        else
+        {
+          digitalWrite(FAN, HIGH);
+        }
+      }
+      if (myObject.hasOwnProperty("pump"))
+      {
+        if ((bool)myObject["pump"] == 1)
+        {
+          digitalWrite(RELAY_PIN, HIGH);
+        }
+        else
+        {
+          digitalWrite(RELAY_PIN, LOW);
+        }
+      }
     }
   }
 
@@ -440,10 +462,7 @@ void loop()
   memset(publicKey, 0, sizeof(publicKey));
   memset(sharedSecret, 0, sizeof(sharedSecret));
   memset(partnerPublicKey16, 0, sizeof(partnerPublicKey16));
-   digitalWrite(FAN, HIGH);
-  digitalWrite(LED_1, HIGH);
-  digitalWrite(LED_2, HIGH);
   // Để đảm bảo chỉ gửi request một lần, không cần loop nữa
-  delay(5000); // Đợi 5 giây và sau đó kết thúc chương trình
+  delay(20000); // Đợi 20 giây và sau đó kết thúc chương trình
   ESP.restart();
 }
