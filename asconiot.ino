@@ -16,14 +16,13 @@
 #include "DHT.h"
 
 #define RELAY_PIN 23
-#define PINK_OUT_SENSOR 26 // cam bien hong ngoai
+#define HORN 26 // cam bien hong ngoai
 #define LIGHT_SENSOR 13
 #define DHT_PIN 15
 #define FAN 5
 #define LED_1 19
 #define LED_2 22
 #define DHTTYPE DHT11 // there are multiple kinds of DHT sensors
-DHT dht(DHT_PIN, DHTTYPE);
 
 #define HUMIDITY A0 // analog/ do am
 
@@ -244,7 +243,7 @@ void setup()
   delay(1000);
 
   pinMode(RELAY_PIN, OUTPUT);
-  pinMode(PINK_OUT_SENSOR, INPUT);
+  pinMode(HORN, OUTPUT);
   pinMode(LIGHT_SENSOR, INPUT);
   pinMode(FAN, OUTPUT);
   pinMode(LED_1, OUTPUT);
@@ -253,6 +252,10 @@ void setup()
   digitalWrite(LED_1, HIGH);
   digitalWrite(LED_2, HIGH);
   digitalWrite(RELAY_PIN, LOW);
+
+  // low la bat
+  digitalWrite(HORN, HIGH);
+
 
   WiFi.begin(ssid);
   while (WiFi.status() != WL_CONNECTED)
@@ -298,6 +301,8 @@ String sendPostRequest(String hexCiphertext, unsigned long long ciphertext_len, 
 
 void loop()
 {
+DHT dht(DHT_PIN, DHTTYPE);
+
   int isFire = 0;
 
   float h = dht.readHumidity();
@@ -327,7 +332,6 @@ void loop()
     Serial.println(moisture);
   }
 
-  int motionDetected = digitalRead(PINK_OUT_SENSOR);
   int lightStatus = digitalRead(LIGHT_SENSOR);
 
   initDiffihelman();
@@ -339,7 +343,6 @@ void loop()
   jsonObj["humidity"] = h;
   jsonObj["humidityGround"] = (int)moisture;
   jsonObj["isDark"] = lightStatus;
-  jsonObj["isMotionDetected"] = motionDetected;
   // Chuyển đổi JSON thành chuỗi
   String jsonString = JSON.stringify(jsonObj);
   char message[jsonString.length() + 1]; // +1 cho ký tự kết thúc chuỗi null
@@ -437,11 +440,11 @@ void loop()
       {
         if ((bool)myObject["sprinkler"] == 1)
         {
-          digitalWrite(LED_1, LOW);
+          digitalWrite(LED_2, LOW);
         }
         else
         {
-          digitalWrite(LED_1, HIGH);
+          digitalWrite(LED_2, HIGH);
         }
       }
       if (myObject.hasOwnProperty("fan"))
@@ -468,8 +471,17 @@ void loop()
       }
        if (myObject.hasOwnProperty("isFire"))
       {
-          isFire = (bool)myObject["isFire"] ;
+
+          if((bool)myObject["isFire"] == 1){
+              // low la bat
          Serial.println("Chay roi!!!!");
+           digitalWrite(HORN, LOW);
+          } 
+          else{
+          Serial.println("Khong chay ma !!!!");
+           digitalWrite(HORN, HIGH);
+
+          }
       }
     }
   }
